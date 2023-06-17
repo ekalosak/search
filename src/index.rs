@@ -24,8 +24,8 @@ pub async fn index_all_files(dir: &PathBuf, csv: &PathBuf) -> Result<(), Error> 
     let mut futs = unpin_futs;
     while !futs.is_empty() {
         match select_all(futs).await {
-            (Ok(emb), _index, remaining) => {
-                write_embedding_to_csv(emb, csv)?;
+            (Ok((emb, fp)), _index, remaining) => {
+                write_embedding_to_csv(emb, fp, csv)?;
                 futs = remaining;
             }
             (Err(e), _index, remaining) => {
@@ -55,23 +55,23 @@ fn list_all_files(dir: &PathBuf) -> Result<Vec<PathBuf>, Error> {
     Ok(fps)
 }
 
-fn write_embedding_to_csv(emb: Embedding, csv: &PathBuf) -> Result<(), Error> {
+fn write_embedding_to_csv(emb: Embedding, source: PathBuf, csv: &PathBuf) -> Result<(), Error> {
     let file = File::create(csv)?;
     let buf = BufWriter::new(file);
     let mut writer = csv::WriterBuilder::new()
         .delimiter(b',')
         .quote_style(csv::QuoteStyle::Necessary)
         .from_writer(buf);
-    let row_str: Vec<String> = csv.to_string();
-    let emb_str: Vec<String> = emb.vec.iter().map(|value| value.to_string()).collect();
-    row_str.extend(emb_str);
+    let path_str: String = (source.clone().into_os_string().into_string().unwrap()).to_string();
+    let mut row_str: Vec<String> = emb.vec.iter().map(|value| value.to_string()).collect();
+    row_str.insert(0, path_str);
     writer.write_record(row_str)?;
     writer.flush()?;
     println!("wrote embedding to {:?}", csv);
     Ok(())
 }
 
-async fn get_embedding(file: PathBuf) -> Result<Embedding, Error> {
+async fn get_embedding(file: PathBuf) -> Result<(Embedding, PathBuf), Error> {
     let fs = file.to_str().ok_or(Error::new(ErrorKind::InvalidInput, "Invalid file path"))?;
     let fc = read_file(fs)?;
     let embd = Embedding::create(
@@ -81,7 +81,7 @@ async fn get_embedding(file: PathBuf) -> Result<Embedding, Error> {
     )
     .await
     .unwrap();
-    Ok(embd)
+    Ok((embd, file))
 }
 
 fn read_file(path: &str) -> Result<String, Error> {
