@@ -14,6 +14,7 @@ pub async fn index_all_files(dir: &PathBuf, csv: &PathBuf) -> Result<(), Error> 
     println!("Indexing files in dir: {:?}", *dir);
     openai::set_key(env::var("OPENAI_API_KEY").unwrap());
     println!("Foud OpenAI API key");
+    // Get all the files in dir and assemble futures for getting their embeddings
     let all_files = list_all_files(dir)?;
     let mut raw_futs = Vec::new();
     for file in all_files {
@@ -22,10 +23,17 @@ pub async fn index_all_files(dir: &PathBuf, csv: &PathBuf) -> Result<(), Error> 
     }
     let unpin_futs: Vec<_> = raw_futs.into_iter().map(Box::pin).collect();
     let mut futs = unpin_futs;
+    // When each future becomes available, write it to the csv file buffer
+    let file = File::create(csv)?;
+    let buf = BufWriter::new(file);
+    let mut writer = csv::WriterBuilder::new()
+        .delimiter(b',')
+        .quote_style(csv::QuoteStyle::Necessary)
+        .from_writer(buf);
     while !futs.is_empty() {
         match select_all(futs).await {
             (Ok((emb, fp)), _index, remaining) => {
-                write_embedding_to_csv(emb, fp, csv)?;
+                write_embedding_to_csv(emb, fp, &mut writer)?;
                 futs = remaining;
             }
             (Err(e), _index, remaining) => {
@@ -34,6 +42,7 @@ pub async fn index_all_files(dir: &PathBuf, csv: &PathBuf) -> Result<(), Error> 
             }
         }
     }
+    writer.flush()?;
     Ok(())
 }
 
@@ -55,19 +64,11 @@ fn list_all_files(dir: &PathBuf) -> Result<Vec<PathBuf>, Error> {
     Ok(fps)
 }
 
-fn write_embedding_to_csv(emb: Embedding, source: PathBuf, csv: &PathBuf) -> Result<(), Error> {
-    let file = File::create(csv)?;
-    let buf = BufWriter::new(file);
-    let mut writer = csv::WriterBuilder::new()
-        .delimiter(b',')
-        .quote_style(csv::QuoteStyle::Necessary)
-        .from_writer(buf);
+fn write_embedding_to_csv(emb: Embedding, source: PathBuf, writer: &mut csv::Writer<BufWriter<File>>) -> Result<(), Error> {
     let path_str: String = (source.clone().into_os_string().into_string().unwrap()).to_string();
     let mut row_str: Vec<String> = emb.vec.iter().map(|value| value.to_string()).collect();
     row_str.insert(0, path_str);
     writer.write_record(row_str)?;
-    writer.flush()?;
-    println!("wrote embedding to {:?}", csv);
     Ok(())
 }
 
