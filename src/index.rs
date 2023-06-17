@@ -3,14 +3,28 @@ use std::fs::File;
 use std::io::{Read, Error, ErrorKind};
 use std::path::PathBuf;
 
+use futures::future::select_all;
 use openai::embeddings::Embedding;
 
 pub async fn index_all_files(dir: &PathBuf, csv: &PathBuf) -> Result<(), Error> {
     println!("Indexing files in dir: {:?}", *dir);
     let all_files = list_all_files(dir)?;
+    let mut raw_futs = Vec::new();
     for file in all_files {
-        let emb = get_embedding(file).await?;
-        write_embedding_to_csv(emb, csv);
+        let rfut = get_embedding(file);
+        raw_futs.push(rfut);
+    }
+    let unpin_futs: Vec<_> = raw_futs.into_iter().map(Box::pin).collect();
+    let futs = unpin_futs;
+    while !futs.is_empty() {
+        match select_all(futs).await {
+            (Ok(emb), _index, remaining) => {
+                write_embedding_to_csv(emb, csv);
+            }
+            (Err(e), _index, remaining) => {
+                println!("Error: {:?}", e);
+            }
+        }
     }
     Ok(())
 }
