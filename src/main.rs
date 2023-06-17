@@ -21,12 +21,19 @@ struct Cli {
     command: Option<Commands>,
 }
 
+fn default_out() -> String {
+    "index.csv".to_string()
+}
+
 #[derive(Subcommand)]
 enum Commands {
     /// Index your code
     Index {
         /// code directory
         dir: Option<PathBuf>,
+        /// index output
+        #[arg(default_value_t = default_out())]
+        out: String,
     },
 }
 
@@ -35,7 +42,8 @@ fn search() -> Result<(), Error> {
     Ok(())
 }
 
-fn main() -> Result<(), Error> {
+#[tokio::main]
+async fn main() -> Result<(), Error> {
     let cli = Cli::parse();
 
     if let Some(config_path) = cli.config.as_deref() {
@@ -54,14 +62,15 @@ fn main() -> Result<(), Error> {
     // You can check for the existence of subcommands, and if found use their
     // matches just as you would the top level cmd
     match &cli.command {
-        Some(Commands::Index { dir }) => {
+        Some(Commands::Index { dir, out }) => {
+            let csv = PathBuf::from(out);
             match &dir {
                 Some(dir) => {
-                    index::index_all_files(&dir)?;
+                    index::index_all_files(&dir, &csv).await?;
                 }
                 None => {
                     let dir = env::current_dir()?;
-                    index::index_all_files(&dir)?;
+                    index::index_all_files(&dir, &csv).await?;
                 }
             }
         }
