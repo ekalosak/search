@@ -9,6 +9,7 @@ description = "A smart, voice-operated code search tool"
 
 [dependencies]
 clap = { version = "4.3.4", features = ["derive"] }
+cpal = "0.15.2"
 csv = "1.2.2"
 futures = "0.3.28"
 openai = "1.0.0-alpha.11"

@@ -1,10 +1,12 @@
 use std::env;
 use std::io::Error;
 use std::path::PathBuf;
+use std::time::Duration;
 
 use clap::{Parser, Subcommand};
 
 mod index;
+mod audio;
 
 #[derive(Parser)]
 #[command(author, version, about, long_about = None)]
@@ -39,6 +41,7 @@ enum Commands {
 
 fn search() -> Result<(), Error> {
     println!("search");
+    let samples = audio::capture_audio_samples(Duration::from_secs(5));
     Ok(())
 }
 
