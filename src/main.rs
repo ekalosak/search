@@ -1,9 +1,10 @@
-use std::{env, fs};
-use std::fs::File;
-use std::io::{Read, Error, ErrorKind};
+use std::env;
+use std::io::Error;
 use std::path::PathBuf;
 
 use clap::{Parser, Subcommand};
+
+mod index;
 
 #[derive(Parser)]
 #[command(author, version, about, long_about = None)]
@@ -34,38 +35,6 @@ fn search() -> Result<(), Error> {
     Ok(())
 }
 
-fn read_file(path: &str) -> Result<String, Error> {
-    let mut file = File::open(path)?;
-    let mut contents = String::new();
-    file.read_to_string(&mut contents)?;
-    Ok(contents)
-}
-
-fn get_vector(file: PathBuf) -> Result<(), Error> {
-    let fs = file.to_str().ok_or(Error::new(ErrorKind::InvalidInput, "Invalid file path"))?;
-    let fc = read_file(fs)?;
-    println!("{:?}", fc);
-    Ok(())
-}
-
-fn index(dir: &PathBuf) -> Result<(), Error> {
-    println!("Indexing files in dir: {:?}", *dir);
-    for ent in fs::read_dir(dir)? {
-        let ent = ent?;
-        let path = ent.path();
-        let metadata = fs::metadata(&path)?;
-        println!("{:?}", path);
-        if metadata.is_file() {
-            let vec = get_vector(path)?;
-            println!("Got vec: {:?}", vec);
-            println!("");
-        } else {
-            index(&path)?;
-        }
-    }
-    Ok(())
-}
-
 fn main() -> Result<(), Error> {
     let cli = Cli::parse();
 
@@ -88,11 +57,11 @@ fn main() -> Result<(), Error> {
         Some(Commands::Index { dir }) => {
             match &dir {
                 Some(dir) => {
-                    index(&dir)?;
+                    index::index_all_files(&dir)?;
                 }
                 None => {
                     let dir = env::current_dir()?;
-                    index(&dir)?;
+                    index::index_all_files(&dir)?;
                 }
             }
         }
