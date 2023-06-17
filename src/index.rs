@@ -6,6 +6,7 @@ use std::path::PathBuf;
 use futures::future::select_all;
 use openai::embeddings::Embedding;
 
+// Index all the files in the input dir using text embedding vectors stored in the output csv.
 pub async fn index_all_files(dir: &PathBuf, csv: &PathBuf) -> Result<(), Error> {
     println!("Indexing files in dir: {:?}", *dir);
     let all_files = list_all_files(dir)?;
@@ -15,20 +16,23 @@ pub async fn index_all_files(dir: &PathBuf, csv: &PathBuf) -> Result<(), Error> 
         raw_futs.push(rfut);
     }
     let unpin_futs: Vec<_> = raw_futs.into_iter().map(Box::pin).collect();
-    let futs = unpin_futs;
+    let mut futs = unpin_futs;
     while !futs.is_empty() {
         match select_all(futs).await {
             (Ok(emb), _index, remaining) => {
                 write_embedding_to_csv(emb, csv);
+                futs = remaining;
             }
             (Err(e), _index, remaining) => {
                 println!("Error: {:?}", e);
+                futs = remaining;
             }
         }
     }
     Ok(())
 }
 
+// Traverse the directory tree under dir and collect all file paths in a Vec.
 fn list_all_files(dir: &PathBuf) -> Result<Vec<PathBuf>, Error> {
     let mut fps = Vec::new();
     for ent in fs::read_dir(dir)? {
