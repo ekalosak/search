@@ -1,29 +1,35 @@
 use std::fs;
 use std::fs::File;
-use std::future::Future;
-use std::pin::Pin;
 use std::io::{Read, Error, ErrorKind};
 use std::path::PathBuf;
 
 use openai::embeddings::Embedding;
 
-pub fn index_all_files(dir: &PathBuf, csv: &PathBuf) -> Pin<Box<dyn Future<Output = Result<(), Error>>>> {
-    Box::pin(async move {
-        println!("Indexing files in dir: {:?}", *dir);
-        for ent in fs::read_dir(dir)? {
-            let ent = ent?;
-            let path = ent.path();
-            let metadata = fs::metadata(&path)?;
-            println!("{:?}", path);
-            if metadata.is_file() {
-                let vec = get_embedding(path).await?;
-                write_embedding_to_csv(vec, csv);
-            } else {
-                index_all_files(&path, csv).await?;
-            }
+pub async fn index_all_files(dir: &PathBuf, csv: &PathBuf) -> Result<(), Error> {
+    println!("Indexing files in dir: {:?}", *dir);
+    let all_files = list_all_files(dir)?;
+    for file in all_files {
+        let emb = get_embedding(file).await?;
+        write_embedding_to_csv(emb, csv);
+    }
+    Ok(())
+}
+
+fn list_all_files(dir: &PathBuf) -> Result<Vec<PathBuf>, Error> {
+    let mut fps = Vec::new();
+    for ent in fs::read_dir(dir)? {
+        let ent = ent?;
+        let path = ent.path();
+        let metadata = fs::metadata(&path)?;
+        println!("{:?}", path);
+        if metadata.is_file() {
+            fps.push(path);
+        } else {
+            let more_fps = list_all_files(&path)?;
+            fps.extend(more_fps);
         }
-        Ok(())
-    })
+    }
+    Ok(fps)
 }
 
 fn write_embedding_to_csv(emb: Embedding, csv: &PathBuf) {
