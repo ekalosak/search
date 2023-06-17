@@ -41,7 +41,9 @@ enum Commands {
 
 fn search() -> Result<(), Error> {
     println!("search");
-    let samples = audio::capture_audio_samples(Duration::from_secs(5));
+    let path = PathBuf::from("audio_samples.raw");
+    let timeout = Duration::from_millis(5);
+    let _samples = audio::capture_audio_samples(path, timeout);
     Ok(())
 }
 
