@@ -1,3 +1,4 @@
+use std::{env}; //, fs};
 use std::path::PathBuf;
 
 use clap::{Parser, Subcommand};
@@ -22,19 +23,21 @@ enum Commands {
     /// Index your code
     Index {
         /// code directory
-        dir: PathBuf,
+        dir: Option<PathBuf>,
     },
 }
 
-fn search() {
+fn search() -> Result<(), std::io::Error> {
     println!("search");
+    Ok(())
 }
 
-fn index(dir: &PathBuf) {
-    println!("Indexing files in dir: {:?}", *dir)
+fn index(dir: &PathBuf) -> Result<(), std::io::Error> {
+    println!("Indexing files in dir: {:?}", *dir);
+    Ok(())
 }
 
-fn main() {
+fn main() -> Result<(), std::io::Error> {
     let cli = Cli::parse();
 
     if let Some(config_path) = cli.config.as_deref() {
@@ -54,10 +57,18 @@ fn main() {
     // matches just as you would the top level cmd
     match &cli.command {
         Some(Commands::Index { dir }) => {
-            index(&dir);
+            match &dir {
+                Some(dir) => {
+                    index(&dir)
+                }
+                None => {
+                    let dir = env::current_dir()?;
+                    index(&dir)
+                }
+            }
         }
         None => {
-            search();
+            search()
         }
     }
 }
