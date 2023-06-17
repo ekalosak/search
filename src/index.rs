@@ -1,6 +1,9 @@
+// TODO refactor loops over embeddings to use openai::Embeddings
+use csv;
+use std::env;
 use std::fs;
 use std::fs::File;
-use std::io::{Read, Error, ErrorKind};
+use std::io::{BufWriter, Error, ErrorKind, Read};
 use std::path::PathBuf;
 
 use futures::future::select_all;
@@ -9,6 +12,8 @@ use openai::embeddings::Embedding;
 // Index all the files in the input dir using text embedding vectors stored in the output csv.
 pub async fn index_all_files(dir: &PathBuf, csv: &PathBuf) -> Result<(), Error> {
     println!("Indexing files in dir: {:?}", *dir);
+    openai::set_key(env::var("OPENAI_API_KEY").unwrap());
+    println!("Foud OpenAI API key");
     let all_files = list_all_files(dir)?;
     let mut raw_futs = Vec::new();
     for file in all_files {
@@ -20,7 +25,7 @@ pub async fn index_all_files(dir: &PathBuf, csv: &PathBuf) -> Result<(), Error> 
     while !futs.is_empty() {
         match select_all(futs).await {
             (Ok(emb), _index, remaining) => {
-                write_embedding_to_csv(emb, csv);
+                write_embedding_to_csv(emb, csv)?;
                 futs = remaining;
             }
             (Err(e), _index, remaining) => {
@@ -50,11 +55,20 @@ fn list_all_files(dir: &PathBuf) -> Result<Vec<PathBuf>, Error> {
     Ok(fps)
 }
 
-fn write_embedding_to_csv(emb: Embedding, csv: &PathBuf) {
-    println!("write_embedding_to_csv {:?}", csv);
-    for x in &emb.vec {
-        println!("\t{:?}", x);
-    }
+fn write_embedding_to_csv(emb: Embedding, csv: &PathBuf) -> Result<(), Error> {
+    let file = File::create(csv)?;
+    let buf = BufWriter::new(file);
+    let mut writer = csv::WriterBuilder::new()
+        .delimiter(b',')
+        .quote_style(csv::QuoteStyle::Necessary)
+        .from_writer(buf);
+    let row_str: Vec<String> = csv.to_string();
+    let emb_str: Vec<String> = emb.vec.iter().map(|value| value.to_string()).collect();
+    row_str.extend(emb_str);
+    writer.write_record(row_str)?;
+    writer.flush()?;
+    println!("wrote embedding to {:?}", csv);
+    Ok(())
 }
 
 async fn get_embedding(file: PathBuf) -> Result<Embedding, Error> {
