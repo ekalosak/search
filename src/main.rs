@@ -1,4 +1,6 @@
-use std::{env}; //, fs};
+use std::{env, fs};
+use std::fs::File;
+use std::io::{Read, Error, ErrorKind};
 use std::path::PathBuf;
 
 use clap::{Parser, Subcommand};
@@ -27,17 +29,44 @@ enum Commands {
     },
 }
 
-fn search() -> Result<(), std::io::Error> {
+fn search() -> Result<(), Error> {
     println!("search");
     Ok(())
 }
 
-fn index(dir: &PathBuf) -> Result<(), std::io::Error> {
-    println!("Indexing files in dir: {:?}", *dir);
+fn read_file(path: &str) -> Result<String, Error> {
+    let mut file = File::open(path)?;
+    let mut contents = String::new();
+    file.read_to_string(&mut contents)?;
+    Ok(contents)
+}
+
+fn get_vector(file: PathBuf) -> Result<(), Error> {
+    let fs = file.to_str().ok_or(Error::new(ErrorKind::InvalidInput, "Invalid file path"))?;
+    let fc = read_file(fs)?;
+    println!("{:?}", fc);
     Ok(())
 }
 
-fn main() -> Result<(), std::io::Error> {
+fn index(dir: &PathBuf) -> Result<(), Error> {
+    println!("Indexing files in dir: {:?}", *dir);
+    for ent in fs::read_dir(dir)? {
+        let ent = ent?;
+        let path = ent.path();
+        let metadata = fs::metadata(&path)?;
+        println!("{:?}", path);
+        if metadata.is_file() {
+            let vec = get_vector(path)?;
+            println!("Got vec: {:?}", vec);
+            println!("");
+        } else {
+            index(&path)?;
+        }
+    }
+    Ok(())
+}
+
+fn main() -> Result<(), Error> {
     let cli = Cli::parse();
 
     if let Some(config_path) = cli.config.as_deref() {
@@ -59,16 +88,17 @@ fn main() -> Result<(), std::io::Error> {
         Some(Commands::Index { dir }) => {
             match &dir {
                 Some(dir) => {
-                    index(&dir)
+                    index(&dir)?;
                 }
                 None => {
                     let dir = env::current_dir()?;
-                    index(&dir)
+                    index(&dir)?;
                 }
             }
         }
         None => {
-            search()
+            search()?;
         }
     }
+    Ok(())
 }
